@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Family Meals</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>🍽️ Family Meals</h1>
+  <div id="whoami" hidden><span id="who"></span> <button id="logout" class="link">Sign out</button></div>
+</header>
+
+<main id="auth" hidden>
+  <form id="authForm" class="card">
+    <h2 id="authTitle">Sign in</h2>
+    <label>Username <input name="username" autocomplete="username" required minlength="3" maxlength="20"></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" required minlength="6"></label>
+    <p id="authError" class="error" role="alert"></p>
+    <button type="submit" id="authSubmit">Sign in</button>
+    <p class="muted"><span id="authSwitchText">New here?</span> <button type="button" id="authSwitch" class="link">Create an account</button></p>
+  </form>
+</main>
+
+<main id="app" hidden>
+  <section class="card">
+    <h2>Today <span id="today" class="muted"></span></h2>
+    <ul id="totals" class="totals"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Add a meal</h2>
+    <form id="mealForm">
+      <label>Calories <input name="calories" type="number" inputmode="numeric" min="0" max="10000" step="1" required placeholder="e.g. 550"></label>
+      <label>Photo (optional) <input name="photo" type="file" accept="image/*"></label>
+      <p id="mealError" class="error" role="alert"></p>
+      <button type="submit" id="mealSubmit">Post meal</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Latest meals</h2>
+    <div id="feed"></div>
+    <p id="empty" class="muted" hidden>No meals yet. Be the first to post!</p>
+    <button id="more" hidden>Load more</button>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

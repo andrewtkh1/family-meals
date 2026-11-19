@@ -279,7 +279,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 // Final error handler: anything thrown or passed to next(err) ends up here
-// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) err.status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
   const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;

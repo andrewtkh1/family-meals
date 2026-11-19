@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { db, PHOTO_DIR } = require('./db');
+const { validatePassword } = require('./password');
 
 const PORT = process.env.PORT || 3000;
 const TIMEZONE = process.env.APP_TIMEZONE || 'UTC';
@@ -82,17 +83,20 @@ function throttle(req, res, next) {
 }
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const BCRYPT_COST = 10;
+// Compared against for unknown usernames so login timing doesn't reveal which usernames exist.
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), BCRYPT_COST);
 
 // ---- auth routes ----
-app.post('/api/register', throttle, (req, res) => {
+app.post('/api/register', throttle, async (req, res) => {
   const { username, password } = req.body || {};
   if (typeof username !== 'string' || !USERNAME_RE.test(username))
     return res.status(400).json({ error: 'Username must be 3-20 letters, numbers or underscores.' });
-  if (typeof password !== 'string' || password.length < 6 || password.length > 100)
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
-  const hash = bcrypt.hashSync(password, 10);
+  const pwError = validatePassword(password);
+  if (pwError) return res.status(400).json({ error: pwError });
   let userId;
   try {
+    const hash = await bcrypt.hash(password, BCRYPT_COST);
     db.exec('BEGIN IMMEDIATE');
     if (q.userCount.get().n >= MAX_USERS) { db.exec('ROLLBACK'); return res.status(403).json({ error: `Sorry, all ${MAX_USERS} family spots are taken.` }); }
     if (q.userByName.get(username)) { db.exec('ROLLBACK'); return res.status(409).json({ error: 'That username is taken.' }); }
@@ -107,13 +111,20 @@ app.post('/api/register', throttle, (req, res) => {
   res.json({ id: userId, username });
 });
 
-app.post('/api/login', throttle, (req, res) => {
-  const { username, password } = req.body || {};
-  const user = typeof username === 'string' ? q.userByName.get(username) : null;
-  const ok = user && typeof password === 'string' && bcrypt.compareSync(password, user.password_hash);
-  if (!ok) return res.status(401).json({ error: 'Wrong username or password.' });
-  startSession(res, user.id);
-  res.json({ id: user.id, username: user.username });
+app.post('/api/login', throttle, async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    const user = typeof username === 'string' ? q.userByName.get(username) : null;
+    const pw = typeof password === 'string' ? password : '';
+    // Always run bcrypt (dummy hash for unknown users) to equalise response time.
+    const match = await bcrypt.compare(pw, user ? user.password_hash : DUMMY_HASH);
+    if (!user || !match || typeof password !== 'string') return res.status(401).json({ error: 'Wrong username or password.' });
+    startSession(res, user.id);
+    res.json({ id: user.id, username: user.username });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Could not sign in.' });
+  }
 });
 
 app.post('/api/logout', (req, res) => {

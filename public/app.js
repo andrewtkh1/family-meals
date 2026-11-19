@@ -163,7 +163,7 @@ async function loadTotals() {
 }
 
 // ---------- feed ----------
-function commentEl(c) {
+function commentEl(c, mealId) {
   const row = el('div', 'comment');
   row.append(avatar(c.username, true));
   const bubble = el('div', 'bubble');
@@ -231,7 +231,7 @@ function mealEl(m) {
     va.onclick = () => { expanded.add(m.id); updateMeal(m.id).catch(e => toast(e.message)); };
     cs.append(va);
   }
-  for (const c of shown) cs.append(commentEl(c));
+  for (const c of shown) cs.append(commentEl(c, m.id));
 
   const form = el('form', 'cform');
   const input = el('input'); input.placeholder = 'Add a comment…'; input.maxLength = 300; input.setAttribute('aria-label', 'Add a comment');

@@ -10,7 +10,9 @@ $env:APP_TIMEZONE = "Asia/Singapore"   # set YOUR timezone (IANA name); default 
 npm start                               # http://localhost:3000
 ```
 
-Settings (environment variables): `PORT` (3000), `APP_TIMEZONE` (UTC), `DATA_DIR` (./data), `SECURE_COOKIE=1` (set once served over HTTPS).
+Settings (environment variables): `PORT` (3000), `APP_TIMEZONE` (UTC), `DATA_DIR` (./data), `SECURE_COOKIE=1` (set once served over HTTPS), `TRUST_PROXY` (off).
+
+`TRUST_PROXY` controls whether the client IP is taken from `X-Forwarded-For` (used for login rate limiting). Leave it unset when clients connect directly; otherwise anyone can spoof the header. When behind a reverse proxy or tunnel, set it to match: e.g. `loopback` (proxy runs on this machine, such as `cloudflared`), a hop count like `1`, or a comma-separated list of trusted IPs/subnets. The value is passed to Express's `trust proxy` setting.
 
 ## Notes
 

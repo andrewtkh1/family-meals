@@ -99,7 +99,7 @@ app.post('/api/register', throttle, (req, res) => {
     userId = Number(q.insertUser.run(username, hash, Date.now()).lastInsertRowid);
     db.exec('COMMIT');
   } catch (e) {
-    try { db.exec('ROLLBACK'); } catch {}
+    try { db.exec('ROLLBACK'); } catch { /* no transaction open; nothing to roll back */ }
     console.error(e);
     return res.status(500).json({ error: 'Could not create account.' });
   }
@@ -182,7 +182,7 @@ app.post('/api/meals', auth, (req, res, next) => {
       filename = crypto.randomBytes(16).toString('hex') + '.jpg';
       await sharp(req.file.buffer).rotate().resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 80 }).toFile(path.join(PHOTO_DIR, filename));
-    } catch (e) {
+    } catch {
       return res.status(400).json({ error: 'That file is not a supported image (use JPG, PNG or WebP).' });
     }
   }

@@ -8,7 +8,7 @@ const expanded = new Set();   // meal ids whose full comment list is shown
 async function api(url, opts = {}) {
   const res = await fetch(url, { credentials: 'same-origin', ...opts });
   let data = {};
-  try { data = await res.json(); } catch {}
+  try { data = await res.json(); } catch { /* non-JSON or empty body; keep {} */ }
   if (res.status === 401 && me) { me = null; showAuth(); }
   if (!res.ok) throw new Error(data.error || 'Something went wrong.');
   return data;
@@ -109,7 +109,7 @@ async function loadTotals() {
 }
 
 // ---------- feed ----------
-function commentEl(c, mealId) {
+function commentEl(c) {
   const row = el('div', 'comment');
   row.append(avatar(c.username, true));
   const bubble = el('div', 'bubble');
@@ -172,7 +172,7 @@ function mealEl(m) {
     va.onclick = () => { expanded.add(m.id); loadFeed(true); };
     cs.append(va);
   }
-  for (const c of shown) cs.append(commentEl(c, m.id));
+  for (const c of shown) cs.append(commentEl(c));
 
   const form = el('form', 'cform');
   const input = el('input'); input.placeholder = 'Add a comment…'; input.maxLength = 300; input.setAttribute('aria-label', 'Add a comment');

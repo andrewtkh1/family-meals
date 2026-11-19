@@ -10,7 +10,7 @@ async function api(url, opts = {}) {
   let data = {};
   try { data = await res.json(); } catch { /* non-JSON or empty body; keep {} */ }
   if (res.status === 401 && me) { me = null; showAuth(); }
-  if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong.'), { status: res.status });
   return data;
 }
 
@@ -173,7 +173,7 @@ function commentEl(c) {
     const x = el('button', 'x', '✕'); x.title = 'Delete comment'; x.setAttribute('aria-label', 'Delete comment');
     x.onclick = async () => {
       if (!confirm('Delete this comment?')) return;
-      try { await api(`/api/comments/${c.id}`, { method: 'DELETE' }); await loadFeed(true); }
+      try { await api(`/api/comments/${c.id}`, { method: 'DELETE' }); await updateMeal(mealId); }
       catch (e) { toast(e.message); }
     };
     row.append(x);
@@ -201,7 +201,7 @@ function mealEl(m) {
   like.setAttribute('aria-pressed', m.liked);
   like.onclick = async () => {
     like.disabled = true;
-    try { await api(`/api/meals/${m.id}/like`, { method: 'POST' }); await loadFeed(true, m.id); }
+    try { await api(`/api/meals/${m.id}/like`, { method: 'POST' }); await updateMeal(m.id, true); }
     catch (e) { toast(e.message); like.disabled = false; }
   };
   const cbtn = el('button', 'pill', `💬 ${m.comments.length}`);
@@ -211,7 +211,12 @@ function mealEl(m) {
     const del = el('button', 'del', 'Delete');
     del.onclick = async () => {
       if (!confirm('Delete this meal? This cannot be undone.')) return;
-      try { await api(`/api/meals/${m.id}`, { method: 'DELETE' }); await refresh(); toast('Meal deleted'); }
+      try {
+        await api(`/api/meals/${m.id}`, { method: 'DELETE' });
+        d.remove(); $('empty').hidden = $('feed').children.length > 0;
+        toast('Meal deleted');
+        await loadTotals();
+      }
       catch (e) { toast(e.message); }
     };
     act.append(del);
@@ -223,7 +228,7 @@ function mealEl(m) {
   const shown = expanded.has(m.id) ? m.comments : m.comments.slice(-2);
   if (m.comments.length > shown.length) {
     const va = el('button', 'viewall', `View all ${m.comments.length} comments`);
-    va.onclick = () => { expanded.add(m.id); loadFeed(true); };
+    va.onclick = () => { expanded.add(m.id); updateMeal(m.id).catch(e => toast(e.message)); };
     cs.append(va);
   }
   for (const c of shown) cs.append(commentEl(c));
@@ -241,7 +246,7 @@ function mealEl(m) {
       await api(`/api/meals/${m.id}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: text }),
       });
-      input.value = ''; expanded.add(m.id); await loadFeed(true);
+      input.value = ''; expanded.add(m.id); await updateMeal(m.id);
     } catch (err) { toast(err.message); send.disabled = false; }
   };
   cs.append(form);
@@ -250,27 +255,48 @@ function mealEl(m) {
   return d;
 }
 
-// reset=true reloads from the newest meals; otherwise appends the next page
-async function loadFeed(reset, popId) {
-  const feed = $('feed');
-  let url;
-  if (reset) url = `/api/feed?limit=${Math.min(Math.max(feed.children.length, 10), 30)}`;
-  else url = '/api/feed?limit=10' + (oldestId ? `&before=${oldestId}` : '');
-  // keep unsent comment drafts and focus across a rebuild
-  const drafts = {};
-  feed.querySelectorAll('input[data-draft]').forEach(i => { if (i.value) drafts[i.dataset.draft] = i.value; });
-  const focusedId = document.activeElement?.dataset?.draft;
-  const { meals, hasMore } = await api(url);
-  if (reset) feed.replaceChildren();
-  for (const m of meals) feed.append(mealEl(m));
-  for (const [id, v] of Object.entries(drafts)) {
-    const i = feed.querySelector(`input[data-draft="${id}"]`); if (i) i.value = v;
+// Re-render one meal card in place (after a like or comment), keeping the rest of the feed
+async function updateMeal(id, pop) {
+  let m;
+  try { m = await api(`/api/meals/${id}`); }
+  catch (e) {
+    if (e.status !== 404) throw e;
+    m = null;   // meal was deleted meanwhile
   }
-  if (focusedId) feed.querySelector(`input[data-draft="${focusedId}"]`)?.focus();
-  if (popId) feed.querySelector(`.meal[data-id="${popId}"] .pill`)?.classList.add('pop');
-  if (meals.length) oldestId = meals[meals.length - 1].id;
-  $('more').hidden = !hasMore;
-  $('empty').hidden = feed.children.length > 0;
+  const old = $('feed').querySelector(`.meal[data-id="${id}"]`);
+  if (!old) return;
+  if (!m) { old.remove(); $('empty').hidden = $('feed').children.length > 0; return; }
+  const oldInput = old.querySelector('input[data-draft]');
+  const draft = oldInput?.value, hadFocus = document.activeElement === oldInput;
+  const card = mealEl(m);
+  old.replaceWith(card);
+  const input = card.querySelector('input[data-draft]');
+  if (draft) input.value = draft;
+  if (hadFocus) input.focus();
+  if (pop) card.querySelector('.pill')?.classList.add('pop');
+}
+
+// reset=true reloads from the newest meals; otherwise appends the next page
+let feedSeq = 0;        // bumps on every load, so stale responses are ignored
+let feedLoading = false;
+async function loadFeed(reset) {
+  if (!reset && feedLoading) return;
+  const seq = ++feedSeq;
+  const more = $('more');
+  feedLoading = true; more.disabled = true;
+  try {
+    const url = '/api/feed?limit=10' + (!reset && oldestId ? `&before=${oldestId}` : '');
+    const { meals, hasMore } = await api(url);
+    if (seq !== feedSeq) return;
+    const feed = $('feed');
+    if (reset) feed.replaceChildren();
+    for (const m of meals) feed.append(mealEl(m));
+    oldestId = meals.length ? meals[meals.length - 1].id : (reset ? null : oldestId);
+    more.hidden = !hasMore;
+    $('empty').hidden = feed.children.length > 0;
+  } finally {
+    if (seq === feedSeq) { feedLoading = false; more.disabled = false; }
+  }
 }
 $('more').onclick = () => loadFeed(false).catch(e => toast(e.message));
 
@@ -292,13 +318,22 @@ $('mealForm').onsubmit = async e => {
   $('mealSubmit').disabled = true; $('mealSubmit').textContent = 'Posting…';
   try {
     await api('/api/meals', { method: 'POST', body: fd });
-    f.reset(); $('photoPreview').hidden = true; $('photoHint').hidden = false;
-    await refresh(); toast('Meal posted 🎉');
-  } catch (err) { $('mealError').textContent = err.message; }
-  finally { $('mealSubmit').disabled = false; $('mealSubmit').textContent = 'Post'; }
+  } catch (err) {
+    $('mealError').textContent = err.message;
+    return;
+  } finally { $('mealSubmit').disabled = false; $('mealSubmit').textContent = 'Post'; }
+  f.reset(); $('photoPreview').hidden = true; $('photoHint').hidden = false;
+  toast('Meal posted 🎉');
+  // The meal is saved; a failed refresh only means the page is out of date
+  refresh().catch(() => toast('Meal posted, but the feed could not be refreshed. Reload to see it.'));
 };
 
 (async () => {
-  try { me = await api('/api/me'); await enterApp(); }
-  catch { showAuth(); }
+  try { me = await api('/api/me'); }
+  catch (e) {
+    if (e.status === 401) showAuth();
+    else toast(`Could not load: ${e.message} Please reload to try again.`);
+    return;
+  }
+  await enterApp().catch(e => toast(e.message));
 })();

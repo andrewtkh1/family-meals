@@ -45,7 +45,7 @@ function timeAgo(ms) {
 }
 
 // ---------- auth ----------
-function showAuth() { $('auth').hidden = false; $('app').hidden = true; $('whoami').hidden = true; }
+function showAuth() { stopAutoRefresh(); $('auth').hidden = false; $('app').hidden = true; $('whoami').hidden = true; }
 function setMode(reg) {
   registerMode = reg;
   $('authTitle').textContent = reg ? 'Join the family' : 'Welcome back';
@@ -80,14 +80,68 @@ async function enterApp() {
   $('who').textContent = me.username;
   $('whoAvatar').replaceWith(Object.assign(avatar(me.username, true), { id: 'whoAvatar' }));
   await refresh();
+  startAutoRefresh();
 }
 
 async function refresh() { await Promise.all([loadTotals(), loadFeed(true)]); }
 
+// ---------- auto-refresh (poll while visible, and on returning to the tab) ----------
+const POLL_MS = 60000;
+let pollTimer = null;
+let polling = false;     // in-flight guard
+let shownDay = null;     // last /api/today day rendered
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  pollTimer = setInterval(() => { if (!document.hidden) poll(); }, POLL_MS);
+}
+function stopAutoRefresh() { clearInterval(pollTimer); pollTimer = null; shownDay = null; }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && pollTimer) poll(); });
+
+// true while the user is typing a comment, so we never rebuild the feed under them
+function composing() {
+  const a = document.activeElement;
+  if (a?.dataset?.draft) return true;
+  return [...$('feed').querySelectorAll('input[data-draft]')].some(i => i.value);
+}
+
+async function poll() {
+  if (polling || !me) return;
+  polling = true;
+  try {
+    const prevDay = shownDay;
+    await loadTotals();
+    if (prevDay && shownDay !== prevDay && !composing()) { await loadFeed(true); return; }
+    await prependNewMeals();
+  } catch {} finally { polling = false; }
+}
+
+// Add meals newer than the top card without rebuilding the feed (keeps drafts, focus, scroll).
+async function prependNewMeals() {
+  const feed = $('feed');
+  const topId = Number(feed.firstElementChild?.dataset.id) || 0;
+  const { meals, hasMore } = await api('/api/feed?limit=10');
+  const fresh = meals.filter(m => m.id > topId);
+  if (!fresh.length || !me) return;
+  if (topId && fresh.length === meals.length) {   // gap we can't fill from one page
+    if (!composing()) await loadFeed(true);
+    return;
+  }
+  // keep whatever the user is looking at in place as cards are inserted above it
+  const anchor = [...feed.children].find(c => c.getBoundingClientRect().bottom > 0);
+  const before = anchor?.getBoundingClientRect().top;
+  const frag = document.createDocumentFragment();
+  for (const m of fresh) frag.append(mealEl(m));
+  feed.prepend(frag);
+  if (anchor) { const d = anchor.getBoundingClientRect().top - before; if (d) window.scrollBy(0, d); }
+  if (!topId) { oldestId = meals[meals.length - 1].id; $('more').hidden = !hasMore; }
+  $('empty').hidden = feed.children.length > 0;
+}
+
 // ---------- today's totals ----------
 async function loadTotals() {
   const t = await api('/api/today');
-  $('today').textContent = t.day;
+  $('today').textContent = t.day; shownDay = t.day;
   const scale = Math.max(2000, ...t.users.map(u => u.calories));
   const ul = $('totals'); ul.replaceChildren();
   let sum = 0;

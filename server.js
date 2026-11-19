@@ -167,30 +167,40 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024, files: 1 },
 });
 
+// Express 4 does not catch rejected promises from async handlers; forward them to next()
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 app.post('/api/meals', auth, (req, res, next) => {
   upload.single('photo')(req, res, err => {
     if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Photo is too large (max 15 MB).' : 'Upload failed.' });
     next();
   });
-}, async (req, res) => {
+}, asyncHandler(async (req, res) => {
   const cal = Number(req.body.calories);
   if (!Number.isInteger(cal) || cal < 0 || cal > MAX_CALORIES)
     return res.status(400).json({ error: `Calories must be a whole number from 0 to ${MAX_CALORIES}.` });
   let filename = null;
   if (req.file) {
+    filename = crypto.randomBytes(16).toString('hex') + '.jpg';
     try {
-      filename = crypto.randomBytes(16).toString('hex') + '.jpg';
       await sharp(req.file.buffer).rotate().resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 80 }).toFile(path.join(PHOTO_DIR, filename));
     } catch (e) {
+      fs.unlink(path.join(PHOTO_DIR, filename), () => {});
       return res.status(400).json({ error: 'That file is not a supported image (use JPG, PNG or WebP).' });
     }
   }
-  const now = Date.now();
-  const id = Number(db.prepare('INSERT INTO meals (user_id, calories, photo, day, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(req.user.id, cal, filename, dayString(now), now).lastInsertRowid);
-  res.json({ id });
-});
+  try {
+    const now = Date.now();
+    const id = Number(db.prepare('INSERT INTO meals (user_id, calories, photo, day, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(req.user.id, cal, filename, dayString(now), now).lastInsertRowid);
+    res.json({ id });
+  } catch (e) {
+    console.error('Failed to save meal:', e);
+    if (filename) fs.unlink(path.join(PHOTO_DIR, filename), () => {});
+    res.status(500).json({ error: 'Server error' });
+  }
+}));
 
 app.delete('/api/meals/:id', auth, (req, res) => {
   const meal = db.prepare('SELECT * FROM meals WHERE id = ?').get(parseInt(req.params.id));
@@ -235,5 +245,17 @@ app.use('/photos', auth, express.static(PHOTO_DIR, { maxAge: '7d', immutable: tr
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
+
+// Final error handler: anything thrown or passed to next(err) ends up here
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) err.status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+  const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+  if (status >= 500) console.error(err);
+  if (res.headersSent) return next(err);
+  const message = status >= 500 ? 'Server error'
+    : (err.expose || err instanceof multer.MulterError) && err.message ? err.message : 'Bad request';
+  res.status(status).json({ error: message });
+});
 
 app.listen(PORT, () => console.log(`Family meals app on http://localhost:${PORT} (timezone: ${TIMEZONE})`));

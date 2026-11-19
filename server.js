@@ -143,9 +143,14 @@ app.get('/api/feed', auth, (req, res) => {
     FROM meals m JOIN users u ON u.id = m.user_id
     WHERE m.id < ? ORDER BY m.id DESC LIMIT ?`).all(before, limit);
   const likersStmt = db.prepare('SELECT u.username, u.id FROM likes l JOIN users u ON u.id = l.user_id WHERE l.meal_id = ? ORDER BY l.rowid');
+  const commentsStmt = db.prepare('SELECT c.id, c.user_id, u.username, c.body, c.created_at FROM comments c JOIN users u ON u.id = c.user_id WHERE c.meal_id = ? ORDER BY c.id');
   const out = meals.map(m => {
     const likers = likersStmt.all(m.id);
+    const comments = commentsStmt.all(m.id).map(c => ({
+      id: c.id, username: c.username, body: c.body, created_at: c.created_at, mine: c.user_id === req.user.id,
+    }));
     return {
+      comments,
       id: m.id, username: m.username, calories: m.calories, created_at: m.created_at,
       photo: m.photo ? `/photos/${m.photo}` : null,
       mine: m.user_id === req.user.id,
@@ -202,6 +207,27 @@ app.post('/api/meals/:id/like', auth, (req, res) => {
   const del = db.prepare('DELETE FROM likes WHERE meal_id = ? AND user_id = ?').run(id, req.user.id);
   if (del.changes === 0) db.prepare('INSERT INTO likes (meal_id, user_id) VALUES (?, ?)').run(id, req.user.id);
   res.json({ liked: del.changes === 0 });
+});
+
+const MAX_COMMENT = 300;
+app.post('/api/meals/:id/comments', auth, (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!db.prepare('SELECT 1 FROM meals WHERE id = ?').get(id)) return res.status(404).json({ error: 'Meal not found.' });
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+  if (!body) return res.status(400).json({ error: 'Comment cannot be empty.' });
+  if (body.length > MAX_COMMENT) return res.status(400).json({ error: `Comment is too long (max ${MAX_COMMENT} characters).` });
+  const now = Date.now();
+  const cid = Number(db.prepare('INSERT INTO comments (meal_id, user_id, body, created_at) VALUES (?, ?, ?, ?)')
+    .run(id, req.user.id, body, now).lastInsertRowid);
+  res.json({ id: cid });
+});
+
+app.delete('/api/comments/:id', auth, (req, res) => {
+  const c = db.prepare('SELECT * FROM comments WHERE id = ?').get(parseInt(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Comment not found.' });
+  if (c.user_id !== req.user.id) return res.status(403).json({ error: 'You can only delete your own comments.' });
+  db.prepare('DELETE FROM comments WHERE id = ?').run(c.id);
+  res.json({ ok: true });
 });
 
 // Photos only for signed-in users

@@ -34,6 +34,14 @@ CREATE TABLE IF NOT EXISTS likes (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   PRIMARY KEY (meal_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_comments_meal ON comments(meal_id);
 `);
 
 module.exports = { db, PHOTO_DIR, DATA_DIR };

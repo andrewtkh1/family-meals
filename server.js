@@ -24,7 +24,15 @@ const dayString = (ms = Date.now()) =>
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+// Only trust X-Forwarded-For when explicitly configured (e.g. TRUST_PROXY=loopback behind a local
+// reverse proxy / tunnel). Unset = off, so clients cannot spoof their IP to dodge the login throttle.
+function parseTrustProxy(v) {
+  if (v === undefined || v.trim() === '' || v === 'false') return false;
+  if (v === 'true') return true;
+  if (/^\d+$/.test(v.trim())) return Number(v.trim());
+  return v.split(',').map(x => x.trim()).filter(Boolean);
+}
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 
@@ -69,17 +77,33 @@ function auth(req, res, next) {
   next();
 }
 
-// Simple in-memory throttle for login/register attempts per IP
-const attempts = new Map();
+// Simple in-memory throttle for login/register attempts per IP, plus per-username lockout for login
+const THROTTLE_WINDOW_MS = 15 * 60 * 1000;
+const MAX_IP_ATTEMPTS = 20;
+const MAX_USER_FAILURES = 10;
+const attempts = new Map();     // ip -> [timestamps]
+const userFailures = new Map(); // lowercased username -> [timestamps of failed logins]
+const recent = (map, key, now) => (map.get(key) || []).filter(t => now - t < THROTTLE_WINDOW_MS);
+const TOO_MANY = { error: 'Too many attempts. Try again in a few minutes.' };
 function throttle(req, res, next) {
   const key = req.ip;
   const now = Date.now();
-  const rec = (attempts.get(key) || []).filter(t => now - t < 15 * 60 * 1000);
-  if (rec.length >= 20) return res.status(429).json({ error: 'Too many attempts. Try again in a few minutes.' });
+  const rec = recent(attempts, key, now);
+  if (rec.length >= MAX_IP_ATTEMPTS) return res.status(429).json(TOO_MANY);
   rec.push(now);
   attempts.set(key, rec);
   next();
 }
+// Prune stale throttle entries so the maps don't grow without bound
+setInterval(() => {
+  const now = Date.now();
+  for (const map of [attempts, userFailures]) {
+    for (const [key, ts] of map) {
+      const live = ts.filter(t => now - t < THROTTLE_WINDOW_MS);
+      if (live.length) map.set(key, live); else map.delete(key);
+    }
+  }
+}, 5 * 60 * 1000).unref();
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 
@@ -109,9 +133,17 @@ app.post('/api/register', throttle, (req, res) => {
 
 app.post('/api/login', throttle, (req, res) => {
   const { username, password } = req.body || {};
+  const userKey = typeof username === 'string' ? username.toLowerCase() : null;
+  const now = Date.now();
+  const fails = userKey ? recent(userFailures, userKey, now) : [];
+  if (fails.length >= MAX_USER_FAILURES) return res.status(429).json(TOO_MANY);
   const user = typeof username === 'string' ? q.userByName.get(username) : null;
   const ok = user && typeof password === 'string' && bcrypt.compareSync(password, user.password_hash);
-  if (!ok) return res.status(401).json({ error: 'Wrong username or password.' });
+  if (!ok) {
+    if (userKey) { fails.push(now); userFailures.set(userKey, fails); }
+    return res.status(401).json({ error: 'Wrong username or password.' });
+  }
+  if (userKey) userFailures.delete(userKey);
   startSession(res, user.id);
   res.json({ id: user.id, username: user.username });
 });
@@ -231,7 +263,7 @@ app.delete('/api/comments/:id', auth, (req, res) => {
 });
 
 // Photos only for signed-in users
-app.use('/photos', auth, express.static(PHOTO_DIR, { maxAge: '7d', immutable: true, index: false, dotfiles: 'deny' }));
+app.use('/photos', auth, express.static(PHOTO_DIR, { maxAge: '7d', immutable: true, setHeaders: res => res.set('Cache-Control', 'private, max-age=604800, immutable'), index: false, dotfiles: 'deny' }));
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

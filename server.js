@@ -134,32 +134,43 @@ app.get('/api/today', auth, (req, res) => {
   res.json({ day, users: rows });
 });
 
+const MEAL_SELECT = `
+  SELECT m.id, m.user_id, u.username, m.calories, m.photo, m.created_at,
+    (SELECT COUNT(*) FROM likes l WHERE l.meal_id = m.id) AS like_count
+  FROM meals m JOIN users u ON u.id = m.user_id`;
+
+const likersStmt = db.prepare('SELECT u.username, u.id FROM likes l JOIN users u ON u.id = l.user_id WHERE l.meal_id = ? ORDER BY l.rowid');
+const commentsStmt = db.prepare('SELECT c.id, c.user_id, u.username, c.body, c.created_at FROM comments c JOIN users u ON u.id = c.user_id WHERE c.meal_id = ? ORDER BY c.id');
+
+// Shape a meal row (from MEAL_SELECT) into a feed item for the given viewer
+function feedItem(m, userId) {
+  const likers = likersStmt.all(m.id);
+  const comments = commentsStmt.all(m.id).map(c => ({
+    id: c.id, username: c.username, body: c.body, created_at: c.created_at, mine: c.user_id === userId,
+  }));
+  return {
+    comments,
+    id: m.id, username: m.username, calories: m.calories, created_at: m.created_at,
+    photo: m.photo ? `/photos/${m.photo}` : null,
+    mine: m.user_id === userId,
+    like_count: m.like_count,
+    liked: likers.some(l => l.id === userId),
+    likers: likers.map(l => l.username),
+  };
+}
+
 app.get('/api/feed', auth, (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 30);
   const before = parseInt(req.query.before) || Number.MAX_SAFE_INTEGER;
-  const meals = db.prepare(`
-    SELECT m.id, m.user_id, u.username, m.calories, m.photo, m.created_at,
-      (SELECT COUNT(*) FROM likes l WHERE l.meal_id = m.id) AS like_count
-    FROM meals m JOIN users u ON u.id = m.user_id
-    WHERE m.id < ? ORDER BY m.id DESC LIMIT ?`).all(before, limit);
-  const likersStmt = db.prepare('SELECT u.username, u.id FROM likes l JOIN users u ON u.id = l.user_id WHERE l.meal_id = ? ORDER BY l.rowid');
-  const commentsStmt = db.prepare('SELECT c.id, c.user_id, u.username, c.body, c.created_at FROM comments c JOIN users u ON u.id = c.user_id WHERE c.meal_id = ? ORDER BY c.id');
-  const out = meals.map(m => {
-    const likers = likersStmt.all(m.id);
-    const comments = commentsStmt.all(m.id).map(c => ({
-      id: c.id, username: c.username, body: c.body, created_at: c.created_at, mine: c.user_id === req.user.id,
-    }));
-    return {
-      comments,
-      id: m.id, username: m.username, calories: m.calories, created_at: m.created_at,
-      photo: m.photo ? `/photos/${m.photo}` : null,
-      mine: m.user_id === req.user.id,
-      like_count: m.like_count,
-      liked: likers.some(l => l.id === req.user.id),
-      likers: likers.map(l => l.username),
-    };
-  });
-  res.json({ meals: out, hasMore: meals.length === limit });
+  const meals = db.prepare(`${MEAL_SELECT} WHERE m.id < ? ORDER BY m.id DESC LIMIT ?`).all(before, limit);
+  res.json({ meals: meals.map(m => feedItem(m, req.user.id)), hasMore: meals.length === limit });
+});
+
+// A single feed item, used to refresh one card in place after a like/comment
+app.get('/api/meals/:id', auth, (req, res) => {
+  const m = db.prepare(`${MEAL_SELECT} WHERE m.id = ?`).get(parseInt(req.params.id));
+  if (!m) return res.status(404).json({ error: 'Meal not found.' });
+  res.json(feedItem(m, req.user.id));
 });
 
 const upload = multer({

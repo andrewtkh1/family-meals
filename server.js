@@ -17,11 +17,17 @@ const SESSION_MS = 90 * 24 * 3600 * 1000;
 const SECURE_COOKIE = process.env.SECURE_COOKIE === '1';
 
 // Validate timezone early
-try { new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }); }
-catch { console.error(`Invalid APP_TIMEZONE: ${TIMEZONE}`); process.exit(1); }
+try {
+  new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE });
+} catch {
+  console.error(`Invalid APP_TIMEZONE: ${TIMEZONE}`);
+  process.exit(1);
+}
 
 const dayString = (ms = Date.now()) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ms);
+  new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+    ms,
+  );
 
 const app = express();
 app.disable('x-powered-by');
@@ -31,7 +37,10 @@ function parseTrustProxy(v) {
   if (v === undefined || v.trim() === '' || v === 'false') return false;
   if (v === 'true') return true;
   if (/^\d+$/.test(v.trim())) return Number(v.trim());
-  return v.split(',').map(x => x.trim()).filter(Boolean);
+  return v
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
 }
 app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 app.use(express.json({ limit: '10kb' }));
@@ -42,8 +51,11 @@ app.use((req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const origin = req.get('origin');
   if (origin) {
-    try { if (new URL(origin).host !== req.get('host')) return res.status(403).json({ error: 'Bad origin' }); }
-    catch { return res.status(403).json({ error: 'Bad origin' }); }
+    try {
+      if (new URL(origin).host !== req.get('host')) return res.status(403).json({ error: 'Bad origin' });
+    } catch {
+      return res.status(403).json({ error: 'Bad origin' });
+    }
   }
   next();
 });
@@ -60,7 +72,9 @@ const q = {
   userCount: db.prepare('SELECT COUNT(*) AS n FROM users'),
   insertUser: db.prepare('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)'),
   insertSession: db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)'),
-  sessionUser: db.prepare('SELECT u.id, u.username, s.created_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?'),
+  sessionUser: db.prepare(
+    'SELECT u.id, u.username, s.created_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?',
+  ),
   delSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
 };
 
@@ -82,9 +96,9 @@ function auth(req, res, next) {
 const THROTTLE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_IP_ATTEMPTS = 20;
 const MAX_USER_FAILURES = 10;
-const attempts = new Map();     // ip -> [timestamps]
+const attempts = new Map(); // ip -> [timestamps]
 const userFailures = new Map(); // lowercased username -> [timestamps of failed logins]
-const recent = (map, key, now) => (map.get(key) || []).filter(t => now - t < THROTTLE_WINDOW_MS);
+const recent = (map, key, now) => (map.get(key) || []).filter((t) => now - t < THROTTLE_WINDOW_MS);
 const TOO_MANY = { error: 'Too many attempts. Try again in a few minutes.' };
 function throttle(req, res, next) {
   const key = req.ip;
@@ -96,15 +110,19 @@ function throttle(req, res, next) {
   next();
 }
 // Prune stale throttle entries so the maps don't grow without bound
-setInterval(() => {
-  const now = Date.now();
-  for (const map of [attempts, userFailures]) {
-    for (const [key, ts] of map) {
-      const live = ts.filter(t => now - t < THROTTLE_WINDOW_MS);
-      if (live.length) map.set(key, live); else map.delete(key);
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const map of [attempts, userFailures]) {
+      for (const [key, ts] of map) {
+        const live = ts.filter((t) => now - t < THROTTLE_WINDOW_MS);
+        if (live.length) map.set(key, live);
+        else map.delete(key);
+      }
     }
-  }
-}, 5 * 60 * 1000).unref();
+  },
+  5 * 60 * 1000,
+).unref();
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 const BCRYPT_COST = 10;
@@ -122,12 +140,22 @@ app.post('/api/register', throttle, async (req, res) => {
   try {
     const hash = await bcrypt.hash(password, BCRYPT_COST);
     db.exec('BEGIN IMMEDIATE');
-    if (q.userCount.get().n >= MAX_USERS) { db.exec('ROLLBACK'); return res.status(403).json({ error: `Sorry, all ${MAX_USERS} family spots are taken.` }); }
-    if (q.userByName.get(username)) { db.exec('ROLLBACK'); return res.status(409).json({ error: 'That username is taken.' }); }
+    if (q.userCount.get().n >= MAX_USERS) {
+      db.exec('ROLLBACK');
+      return res.status(403).json({ error: `Sorry, all ${MAX_USERS} family spots are taken.` });
+    }
+    if (q.userByName.get(username)) {
+      db.exec('ROLLBACK');
+      return res.status(409).json({ error: 'That username is taken.' });
+    }
     userId = Number(q.insertUser.run(username, hash, Date.now()).lastInsertRowid);
     db.exec('COMMIT');
   } catch (e) {
-    try { db.exec('ROLLBACK'); } catch { /* no transaction open; nothing to roll back */ }
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      /* no transaction open; nothing to roll back */
+    }
     console.error(e);
     return res.status(500).json({ error: 'Could not create account.' });
   }
@@ -147,7 +175,10 @@ app.post('/api/login', throttle, async (req, res) => {
     // Always run bcrypt (dummy hash for unknown users) to equalise response time.
     const match = await bcrypt.compare(pw, user ? user.password_hash : DUMMY_HASH);
     if (!user || !match || typeof password !== 'string') {
-      if (userKey) { fails.push(now); userFailures.set(userKey, fails); }
+      if (userKey) {
+        fails.push(now);
+        userFailures.set(userKey, fails);
+      }
       return res.status(401).json({ error: 'Wrong username or password.' });
     }
     if (userKey) userFailures.delete(userKey);
@@ -170,10 +201,14 @@ app.get('/api/me', auth, (req, res) => res.json({ ...req.user, timezone: TIMEZON
 // ---- data routes ----
 app.get('/api/today', auth, (req, res) => {
   const day = dayString();
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT u.id, u.username, COALESCE(SUM(m.calories), 0) AS calories, COUNT(m.id) AS meals
     FROM users u LEFT JOIN meals m ON m.user_id = u.id AND m.day = ?
-    GROUP BY u.id ORDER BY calories DESC, u.username COLLATE NOCASE`).all(day);
+    GROUP BY u.id ORDER BY calories DESC, u.username COLLATE NOCASE`,
+    )
+    .all(day);
   res.json({ day, users: rows });
 });
 
@@ -182,23 +217,34 @@ const MEAL_SELECT = `
     (SELECT COUNT(*) FROM likes l WHERE l.meal_id = m.id) AS like_count
   FROM meals m JOIN users u ON u.id = m.user_id`;
 
-const likersStmt = db.prepare('SELECT u.username, u.id FROM likes l JOIN users u ON u.id = l.user_id WHERE l.meal_id = ? ORDER BY l.rowid');
-const commentsStmt = db.prepare('SELECT c.id, c.user_id, u.username, c.body, c.created_at FROM comments c JOIN users u ON u.id = c.user_id WHERE c.meal_id = ? ORDER BY c.id');
+const likersStmt = db.prepare(
+  'SELECT u.username, u.id FROM likes l JOIN users u ON u.id = l.user_id WHERE l.meal_id = ? ORDER BY l.rowid',
+);
+const commentsStmt = db.prepare(
+  'SELECT c.id, c.user_id, u.username, c.body, c.created_at FROM comments c JOIN users u ON u.id = c.user_id WHERE c.meal_id = ? ORDER BY c.id',
+);
 
 // Shape a meal row (from MEAL_SELECT) into a feed item for the given viewer
 function feedItem(m, userId) {
   const likers = likersStmt.all(m.id);
-  const comments = commentsStmt.all(m.id).map(c => ({
-    id: c.id, username: c.username, body: c.body, created_at: c.created_at, mine: c.user_id === userId,
+  const comments = commentsStmt.all(m.id).map((c) => ({
+    id: c.id,
+    username: c.username,
+    body: c.body,
+    created_at: c.created_at,
+    mine: c.user_id === userId,
   }));
   return {
     comments,
-    id: m.id, username: m.username, calories: m.calories, created_at: m.created_at,
+    id: m.id,
+    username: m.username,
+    calories: m.calories,
+    created_at: m.created_at,
     photo: m.photo ? `/photos/${m.photo}` : null,
     mine: m.user_id === userId,
     like_count: m.like_count,
-    liked: likers.some(l => l.id === userId),
-    likers: likers.map(l => l.username),
+    liked: likers.some((l) => l.id === userId),
+    likers: likers.map((l) => l.username),
   };
 }
 
@@ -206,7 +252,7 @@ app.get('/api/feed', auth, (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 30);
   const before = parseInt(req.query.before) || Number.MAX_SAFE_INTEGER;
   const meals = db.prepare(`${MEAL_SELECT} WHERE m.id < ? ORDER BY m.id DESC LIMIT ?`).all(before, limit);
-  res.json({ meals: meals.map(m => feedItem(m, req.user.id)), hasMore: meals.length === limit });
+  res.json({ meals: meals.map((m) => feedItem(m, req.user.id)), hasMore: meals.length === limit });
 });
 
 // A single feed item, used to refresh one card in place after a like/comment
@@ -222,39 +268,53 @@ const upload = multer({
 });
 
 // Express 4 does not catch rejected promises from async handlers; forward them to next()
-const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-app.post('/api/meals', auth, (req, res, next) => {
-  upload.single('photo')(req, res, err => {
-    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Photo is too large (max 15 MB).' : 'Upload failed.' });
-    next();
-  });
-}, asyncHandler(async (req, res) => {
-  const cal = Number(req.body.calories);
-  if (!Number.isInteger(cal) || cal < 0 || cal > MAX_CALORIES)
-    return res.status(400).json({ error: `Calories must be a whole number from 0 to ${MAX_CALORIES}.` });
-  let filename = null;
-  if (req.file) {
-    filename = crypto.randomBytes(16).toString('hex') + '.jpg';
-    try {
-      await sharp(req.file.buffer).rotate().resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 80 }).toFile(path.join(PHOTO_DIR, filename));
-    } catch {
-      fs.unlink(path.join(PHOTO_DIR, filename), () => {});
-      return res.status(400).json({ error: 'That file is not a supported image (use JPG, PNG or WebP).' });
+app.post(
+  '/api/meals',
+  auth,
+  (req, res, next) => {
+    upload.single('photo')(req, res, (err) => {
+      if (err)
+        return res
+          .status(400)
+          .json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'Photo is too large (max 15 MB).' : 'Upload failed.' });
+      next();
+    });
+  },
+  asyncHandler(async (req, res) => {
+    const cal = Number(req.body.calories);
+    if (!Number.isInteger(cal) || cal < 0 || cal > MAX_CALORIES)
+      return res.status(400).json({ error: `Calories must be a whole number from 0 to ${MAX_CALORIES}.` });
+    let filename = null;
+    if (req.file) {
+      filename = crypto.randomBytes(16).toString('hex') + '.jpg';
+      try {
+        await sharp(req.file.buffer)
+          .rotate()
+          .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toFile(path.join(PHOTO_DIR, filename));
+      } catch {
+        fs.unlink(path.join(PHOTO_DIR, filename), () => {});
+        return res.status(400).json({ error: 'That file is not a supported image (use JPG, PNG or WebP).' });
+      }
     }
-  }
-  try {
-    const now = Date.now();
-    const id = Number(db.prepare('INSERT INTO meals (user_id, calories, photo, day, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(req.user.id, cal, filename, dayString(now), now).lastInsertRowid);
-    res.json({ id });
-  } catch (e) {
-    console.error('Failed to save meal:', e);
-    if (filename) fs.unlink(path.join(PHOTO_DIR, filename), () => {});
-    res.status(500).json({ error: 'Server error' });
-  }
-}));
+    try {
+      const now = Date.now();
+      const id = Number(
+        db
+          .prepare('INSERT INTO meals (user_id, calories, photo, day, created_at) VALUES (?, ?, ?, ?, ?)')
+          .run(req.user.id, cal, filename, dayString(now), now).lastInsertRowid,
+      );
+      res.json({ id });
+    } catch (e) {
+      console.error('Failed to save meal:', e);
+      if (filename) fs.unlink(path.join(PHOTO_DIR, filename), () => {});
+      res.status(500).json({ error: 'Server error' });
+    }
+  }),
+);
 
 app.delete('/api/meals/:id', auth, (req, res) => {
   const meal = db.prepare('SELECT * FROM meals WHERE id = ?').get(parseInt(req.params.id));
@@ -267,7 +327,8 @@ app.delete('/api/meals/:id', auth, (req, res) => {
 
 app.post('/api/meals/:id/like', auth, (req, res) => {
   const id = parseInt(req.params.id);
-  if (!db.prepare('SELECT 1 FROM meals WHERE id = ?').get(id)) return res.status(404).json({ error: 'Meal not found.' });
+  if (!db.prepare('SELECT 1 FROM meals WHERE id = ?').get(id))
+    return res.status(404).json({ error: 'Meal not found.' });
   const del = db.prepare('DELETE FROM likes WHERE meal_id = ? AND user_id = ?').run(id, req.user.id);
   if (del.changes === 0) db.prepare('INSERT INTO likes (meal_id, user_id) VALUES (?, ?)').run(id, req.user.id);
   res.json({ liked: del.changes === 0 });
@@ -276,13 +337,18 @@ app.post('/api/meals/:id/like', auth, (req, res) => {
 const MAX_COMMENT = 300;
 app.post('/api/meals/:id/comments', auth, (req, res) => {
   const id = parseInt(req.params.id);
-  if (!db.prepare('SELECT 1 FROM meals WHERE id = ?').get(id)) return res.status(404).json({ error: 'Meal not found.' });
+  if (!db.prepare('SELECT 1 FROM meals WHERE id = ?').get(id))
+    return res.status(404).json({ error: 'Meal not found.' });
   const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
   if (!body) return res.status(400).json({ error: 'Comment cannot be empty.' });
-  if (body.length > MAX_COMMENT) return res.status(400).json({ error: `Comment is too long (max ${MAX_COMMENT} characters).` });
+  if (body.length > MAX_COMMENT)
+    return res.status(400).json({ error: `Comment is too long (max ${MAX_COMMENT} characters).` });
   const now = Date.now();
-  const cid = Number(db.prepare('INSERT INTO comments (meal_id, user_id, body, created_at) VALUES (?, ?, ?, ?)')
-    .run(id, req.user.id, body, now).lastInsertRowid);
+  const cid = Number(
+    db
+      .prepare('INSERT INTO comments (meal_id, user_id, body, created_at) VALUES (?, ?, ?, ?)')
+      .run(id, req.user.id, body, now).lastInsertRowid,
+  );
   res.json({ id: cid });
 });
 
@@ -295,7 +361,17 @@ app.delete('/api/comments/:id', auth, (req, res) => {
 });
 
 // Photos only for signed-in users
-app.use('/photos', auth, express.static(PHOTO_DIR, { maxAge: '7d', immutable: true, setHeaders: res => res.set('Cache-Control', 'private, max-age=604800, immutable'), index: false, dotfiles: 'deny' }));
+app.use(
+  '/photos',
+  auth,
+  express.static(PHOTO_DIR, {
+    maxAge: '7d',
+    immutable: true,
+    setHeaders: (res) => res.set('Cache-Control', 'private, max-age=604800, immutable'),
+    index: false,
+    dotfiles: 'deny',
+  }),
+);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
@@ -306,8 +382,12 @@ app.use((err, req, res, next) => {
   const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
   if (status >= 500) console.error(err);
   if (res.headersSent) return next(err);
-  const message = status >= 500 ? 'Server error'
-    : (err.expose || err instanceof multer.MulterError) && err.message ? err.message : 'Bad request';
+  const message =
+    status >= 500
+      ? 'Server error'
+      : (err.expose || err instanceof multer.MulterError) && err.message
+        ? err.message
+        : 'Bad request';
   res.status(status).json({ error: message });
 });
 

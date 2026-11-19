@@ -10,13 +10,22 @@ async function main() {
     process.exit(1);
   }
   const pwError = validatePassword(pw);
-  if (pwError) { console.error(pwError); process.exit(1); }
+  if (pwError) {
+    console.error(pwError);
+    process.exit(1);
+  }
   const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-  if (!user) { console.error('No such user.'); process.exit(1); }
+  if (!user) {
+    console.error('No such user.');
+    process.exit(1);
+  }
   const hash = await bcrypt.hash(pw, 10);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
   console.log(`Password reset for ${username}. They've been signed out everywhere.`);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

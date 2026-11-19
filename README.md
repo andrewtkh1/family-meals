@@ -25,4 +25,5 @@ Settings (environment variables): `PORT` (3000), `APP_TIMEZONE` (UTC), `DATA_DIR
 - The site is down whenever this PC is off or asleep.
 
 ## Remote access (still to decide)
+
 Cloudflare Tunnel is the usual choice (public HTTPS URL, no router ports opened). Set `SECURE_COOKIE=1` once you're on HTTPS.

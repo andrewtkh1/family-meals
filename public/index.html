@@ -1,77 +1,92 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#ff6b3d">
-<title>Family Meals</title>
-<link rel="stylesheet" href="/style.css">
-</head>
-<body>
-<header class="topbar">
-  <div class="topbar-inner">
-    <h1 class="brand"><span class="logo">🍽️</span> Family Meals</h1>
-    <div id="whoami" class="who" hidden>
-      <span id="whoAvatar" class="avatar sm"></span>
-      <span id="who"></span>
-      <button id="logout" class="ghost small">Sign out</button>
-    </div>
-  </div>
-</header>
-
-<main id="auth" class="wrap" hidden>
-  <form id="authForm" class="card auth-card">
-    <div class="auth-hero">🥗</div>
-    <h2 id="authTitle">Welcome back</h2>
-    <p class="muted" id="authSub">Sign in to see what the family is eating.</p>
-    <label>Username <input name="username" autocomplete="username" required minlength="3" maxlength="20"></label>
-    <label>Password <input name="password" type="password" autocomplete="current-password" required minlength="6"></label>
-    <p id="authError" class="error" role="alert"></p>
-    <button type="submit" id="authSubmit" class="primary block">Sign in</button>
-    <p class="muted center"><span id="authSwitchText">New here?</span> <button type="button" id="authSwitch" class="link">Create an account</button></p>
-  </form>
-</main>
-
-<main id="app" class="wrap" hidden>
-  <section class="card">
-    <div class="card-head">
-      <h2>Today</h2>
-      <span id="today" class="chip"></span>
-    </div>
-    <ul id="totals" class="totals"></ul>
-    <p class="family-total muted">Family total: <strong id="familyTotal">0</strong> kcal</p>
-  </section>
-
-  <section class="card">
-    <h2>Add a meal</h2>
-    <form id="mealForm" class="meal-form">
-      <label class="photo-pick" id="photoPick">
-        <input name="photo" type="file" accept="image/*" id="photoInput">
-        <img id="photoPreview" alt="Selected photo preview" hidden>
-        <span id="photoHint">📷 Add a photo <small>(optional)</small></span>
-      </label>
-      <div class="row">
-        <label class="grow">Calories
-          <input name="calories" type="number" inputmode="numeric" min="0" max="10000" step="1" required placeholder="e.g. 550">
-        </label>
-        <button type="submit" id="mealSubmit" class="primary">Post</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ff6b3d" />
+    <title>Family Meals</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <h1 class="brand"><span class="logo">🍽️</span> Family Meals</h1>
+        <div id="whoami" class="who" hidden>
+          <span id="whoAvatar" class="avatar sm"></span>
+          <span id="who"></span>
+          <button id="logout" class="ghost small">Sign out</button>
+        </div>
       </div>
-      <p id="mealError" class="error" role="alert"></p>
-    </form>
-  </section>
+    </header>
 
-  <section>
-    <h2 class="section-title">Latest meals</h2>
-    <div id="feed"></div>
-    <div id="empty" class="empty" hidden>
-      <div class="empty-emoji">🍳</div>
-      <p>No meals yet. Be the first to post!</p>
-    </div>
-    <button id="more" class="ghost block" hidden>Load more</button>
-  </section>
-</main>
+    <main id="auth" class="wrap" hidden>
+      <form id="authForm" class="card auth-card">
+        <div class="auth-hero">🥗</div>
+        <h2 id="authTitle">Welcome back</h2>
+        <p class="muted" id="authSub">Sign in to see what the family is eating.</p>
+        <label>Username <input name="username" autocomplete="username" required minlength="3" maxlength="20" /></label>
+        <label
+          >Password <input name="password" type="password" autocomplete="current-password" required minlength="6"
+        /></label>
+        <p id="authError" class="error" role="alert"></p>
+        <button type="submit" id="authSubmit" class="primary block">Sign in</button>
+        <p class="muted center">
+          <span id="authSwitchText">New here?</span>
+          <button type="button" id="authSwitch" class="link">Create an account</button>
+        </p>
+      </form>
+    </main>
 
-<div id="toast" class="toast" role="status" hidden></div>
-<script src="/app.js"></script>
-</body>
+    <main id="app" class="wrap" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2>Today</h2>
+          <span id="today" class="chip"></span>
+        </div>
+        <ul id="totals" class="totals"></ul>
+        <p class="family-total muted">Family total: <strong id="familyTotal">0</strong> kcal</p>
+      </section>
+
+      <section class="card">
+        <h2>Add a meal</h2>
+        <form id="mealForm" class="meal-form">
+          <label class="photo-pick" id="photoPick">
+            <input name="photo" type="file" accept="image/*" id="photoInput" />
+            <img id="photoPreview" alt="Selected photo preview" hidden />
+            <span id="photoHint">📷 Add a photo <small>(optional)</small></span>
+          </label>
+          <div class="row">
+            <label class="grow"
+              >Calories
+              <input
+                name="calories"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                max="10000"
+                step="1"
+                required
+                placeholder="e.g. 550"
+              />
+            </label>
+            <button type="submit" id="mealSubmit" class="primary">Post</button>
+          </div>
+          <p id="mealError" class="error" role="alert"></p>
+        </form>
+      </section>
+
+      <section>
+        <h2 class="section-title">Latest meals</h2>
+        <div id="feed"></div>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-emoji">🍳</div>
+          <p>No meals yet. Be the first to post!</p>
+        </div>
+        <button id="more" class="ghost block" hidden>Load more</button>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script src="/app.js"></script>
+  </body>
 </html>

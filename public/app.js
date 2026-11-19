@@ -113,7 +113,7 @@ async function poll() {
     await loadTotals();
     if (prevDay && shownDay !== prevDay && !composing()) { await loadFeed(true); return; }
     await prependNewMeals();
-  } catch {} finally { polling = false; }
+  } catch { /* transient network error; retry next poll */ } finally { polling = false; }
 }
 
 // Add meals newer than the top card without rebuilding the feed (keeps drafts, focus, scroll).

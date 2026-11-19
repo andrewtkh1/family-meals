@@ -1,12 +1,12 @@
 :root {
-  --bg:#faf7f2; --card:#fff; --ink:#26221f; --muted:#8a837b; --line:#eee8de;
-  --accent:#ff6b3d; --accent-ink:#fff; --accent-soft:#ffe9e1; --bar:#f1ebe2;
-  --danger:#d9402b; --shadow:0 1px 2px rgba(60,40,20,.06), 0 6px 18px rgba(60,40,20,.06);
+  --bg:#faf7f2; --card:#fff; --ink:#26221f; --muted:#6b645c; --line:#eee8de;
+  --accent:#c2410c; --accent-ink:#fff; --accent-fg:#9a3412; --accent-soft:#ffe9e1; --bar:#f1ebe2;
+  --danger:#c0392b; --shadow:0 1px 2px rgba(60,40,20,.06), 0 6px 18px rgba(60,40,20,.06);
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg:#141416; --card:#1f1f23; --ink:#f1efec; --muted:#9b9aa3; --line:#2f2f35;
-    --accent:#ff7a50; --accent-soft:#3a2219; --bar:#2a2a30;
+    --accent:#c74512; --accent-fg:#ff7a50; --danger:#ff6b5a; --accent-soft:#3a2219; --bar:#2a2a30;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
   }
 }
@@ -26,7 +26,7 @@ h2 { font-size:1.05rem; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; box-shadow:var(--shadow); }
 .card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 .section-title { margin:8px 2px 12px; }
-.chip { background:var(--accent-soft); color:var(--accent); font-size:.8rem; padding:3px 10px; border-radius:99px; font-weight:600; }
+.chip { background:var(--accent-soft); color:var(--accent-fg); font-size:.8rem; padding:3px 10px; border-radius:99px; font-weight:600; }
 
 label { display:block; margin-bottom:12px; font-size:.85rem; color:var(--muted); font-weight:500; }
 input { display:block; width:100%; margin-top:5px; padding:11px 12px; font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:10px; }
@@ -39,7 +39,7 @@ button.primary { background:var(--accent); color:var(--accent-ink); font-weight:
 button.ghost { background:var(--card); color:var(--ink); border:1px solid var(--line); }
 button.small { padding:5px 10px; font-size:.8rem; }
 button.block { display:block; width:100%; }
-button.link { background:none; color:var(--accent); padding:0; text-decoration:underline; font-size:inherit; }
+button.link { background:none; color:var(--accent-fg); padding:0; text-decoration:underline; font-size:inherit; }
 
 .row { display:flex; gap:10px; align-items:flex-end; }
 .row .grow { flex:1; margin:0; }
@@ -62,7 +62,7 @@ button.link { background:none; color:var(--accent); padding:0; text-decoration:u
 .totals { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
 .totals li { display:grid; grid-template-columns:40px 1fr auto; gap:4px 12px; align-items:center; }
 .totals .name { font-weight:600; }
-.totals .name small { color:var(--accent); font-weight:600; margin-left:4px; }
+.totals .name small { color:var(--accent-fg); font-weight:600; margin-left:4px; }
 .totals .kcal { font-variant-numeric:tabular-nums; font-weight:700; }
 .totals .kcal small { color:var(--muted); font-weight:400; }
 .bar { grid-column:2 / 4; height:8px; background:var(--bar); border-radius:99px; overflow:hidden; }
@@ -84,12 +84,12 @@ button.link { background:none; color:var(--accent); padding:0; text-decoration:u
 .meal-head .info { flex:1; min-width:0; }
 .meal-head .info strong { display:block; line-height:1.2; }
 .meal-head .info span { font-size:.8rem; color:var(--muted); }
-.kcal-badge { background:var(--accent-soft); color:var(--accent); font-weight:800; padding:4px 12px; border-radius:99px; white-space:nowrap; }
+.kcal-badge { background:var(--accent-soft); color:var(--accent-fg); font-weight:800; padding:4px 12px; border-radius:99px; white-space:nowrap; }
 .meal img.photo { width:100%; display:block; max-height:520px; object-fit:cover; background:var(--bar); }
 .meal-body { padding:10px 14px 14px; }
 .actions { display:flex; align-items:center; gap:8px; }
 .pill { background:var(--bg); color:var(--ink); border:1px solid var(--line); padding:6px 12px; border-radius:99px; font-size:.9rem; }
-.pill.on { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.pill.on { background:var(--accent-soft); border-color:var(--accent); color:var(--accent-fg); }
 .pill.pop { animation:pop .25s; }
 @keyframes pop { 50% { transform:scale(1.18); } }
 .del { margin-left:auto; background:none; color:var(--muted); padding:6px; font-size:.85rem; }
